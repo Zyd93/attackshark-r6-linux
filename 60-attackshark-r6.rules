@@ -1,0 +1,6 @@
+# ATTACK SHARK R6 Gaming Mouse (Wired 373e:0021 & Wireless 2.4G 373e:0022)
+# Grants local desktop session access via systemd uaccess + hidraw/usb permissions.
+KERNEL=="hidraw*", ATTRS{idVendor}=="373e", ATTRS{idProduct}=="0021", MODE="0660", TAG+="uaccess"
+KERNEL=="hidraw*", ATTRS{idVendor}=="373e", ATTRS{idProduct}=="0022", MODE="0660", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="373e", ATTR{idProduct}=="0021", MODE="0660", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="373e", ATTR{idProduct}=="0022", MODE="0660", TAG+="uaccess"

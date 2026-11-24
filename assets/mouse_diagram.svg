@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 480" width="360" height="480">
+  <defs>
+    <linearGradient id="shellGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#28363c"/>
+      <stop offset="55%" stop-color="#1d272b"/>
+      <stop offset="100%" stop-color="#141b1e"/>
+    </linearGradient>
+    <linearGradient id="btnLeftGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#31434a"/>
+      <stop offset="100%" stop-color="#223035"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Subtle dark vignette grid background -->
+  <rect x="0" y="0" width="360" height="480" rx="14" fill="#161d20"/>
+  <circle cx="180" cy="245" r="145" fill="none" stroke="#212e33" stroke-width="1.5" stroke-dasharray="6 6"/>
+
+  <!-- USB-C front connector stub / orientation cue -->
+  <path d="M170 46 L190 46 L186 58 L174 58 Z" fill="#253235" stroke="#3d555e" stroke-width="2"/>
+  <line x1="180" y1="24" x2="180" y2="46" stroke="#39525c" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- Main mouse shell outline -->
+  <path d="M180 58
+           C222 58 250 86 254 142
+           L259 248
+           C263 324 234 404 180 404
+           C126 404 97 324 101 248
+           L106 142
+           C110 86 138 58 180 58 Z"
+        fill="url(#shellGrad)" stroke="#5cd4ef" stroke-width="3" stroke-linejoin="round"/>
+
+  <!-- Left & right click plates -->
+  <path d="M177 60 C138 61 112 87 108 140 L106 184 Q141 196 177 192 Z"
+        fill="url(#btnLeftGrad)" stroke="#3d555e" stroke-width="2"/>
+  <path d="M183 60 C222 61 248 87 252 140 L254 184 Q219 196 183 192 Z"
+        fill="url(#btnLeftGrad)" stroke="#3d555e" stroke-width="2"/>
+
+  <!-- Side buttons (Left side: Forward / Backward) -->
+  <rect x="92" y="182" width="11" height="42" rx="5" fill="#0d7c96" stroke="#5cd4ef" stroke-width="2"/>
+  <rect x="92" y="232" width="11" height="42" rx="5" fill="#0d7c96" stroke="#5cd4ef" stroke-width="2"/>
+
+  <!-- Center scroll wheel channel -->
+  <rect x="167" y="88" width="26" height="72" rx="13" fill="#0f1517" stroke="#394d54" stroke-width="2"/>
+  <!-- Scroll wheel -->
+  <rect x="171" y="96" width="18" height="54" rx="9" fill="#182226" stroke="#5cd4ef" stroke-width="2.5"/>
+  <!-- Scroll wheel ridges & direction arrows -->
+  <path d="M180 82 L175 90 L185 90 Z" fill="#5cd4ef"/>
+  <path d="M180 164 L175 156 L185 156 Z" fill="#2fd4c6"/>
+  <line x1="174" y1="112" x2="186" y2="112" stroke="#5cd4ef" stroke-width="2"/>
+  <line x1="174" y1="123" x2="186" y2="123" stroke="#5cd4ef" stroke-width="2"/>
+  <line x1="174" y1="134" x2="186" y2="134" stroke="#5cd4ef" stroke-width="2"/>
+
+  <!-- Palm emblem & model mark -->
+  <path d="M150 286 L180 264 L210 286" fill="none" stroke="#2fd4c6" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="180" y="348" text-anchor="middle" font-family="Noto Sans, DejaVu Sans, sans-serif" font-size="14" font-weight="bold" fill="#9cb2ba">ATTACK SHARK R6</text>
+
+  <!-- Callout markers for 7 configurable controls -->
+  <!-- 1: Left Button -->
+  <line x1="135" y1="115" x2="72" y2="92" stroke="#5cd4ef" stroke-width="1.8"/>
+  <circle cx="135" cy="115" r="4" fill="#5cd4ef"/>
+  <circle cx="58" cy="90" r="13" fill="#0b6980" stroke="#5cd4ef" stroke-width="2"/>
+  <text x="58" y="95" text-anchor="middle" font-family="Noto Sans, DejaVu Sans, sans-serif" font-size="12" font-weight="bold" fill="#ffffff">1</text>
+  <text x="58" y="70" text-anchor="middle" font-family="Noto Sans, DejaVu Sans, sans-serif" font-size="11" fill="#e6eff2">Left</text>
+
+  <!-- 2: Right Button -->
+  <line x1="225" y1="115" x2="288" y2="92" stroke="#5cd4ef" stroke-width="1.8"/>
+  <circle cx="225" cy="115" r="4" fill="#5cd4ef"/>
+  <circle cx="302" cy="90" r="13" fill="#0b6980" stroke="#5cd4ef" stroke-width="2"/>
+  <text x="302" y="95" text-anchor="middle" font-family="Noto Sans, DejaVu Sans, sans-serif" font-size="12" font-weight="bold" fill="#ffffff">2</text>
+  <text x="302" y="70" text-anchor="middle" font-family="Noto Sans, DejaVu Sans, sans-serif" font-size="11" fill="#e6eff2">Right</text>
+
+  <!-- 3: Middle Click -->
+  <line x1="189" y1="123" x2="288" y2="148" stroke="#5cd4ef" stroke-width="1.8"/>
+  <circle cx="189" cy="123" r="4" fill="#5cd4ef"/>
+  <circle cx="302" cy="150" r="13" fill="#0b6980" stroke="#5cd4ef" stroke-width="2"/>
+  <text x="302" y="155" text-anchor="middle" font-family="Noto Sans, DejaVu Sans, sans-serif" font-size="12" font-weight="bold" fill="#ffffff">3</text>
+  <text x="302" y="130" text-anchor="middle" font-family="Noto Sans, DejaVu Sans, sans-serif" font-size="11" fill="#e6eff2">Middle</text>
+
+  <!-- 4: Forward -->
+  <line x1="92" y1="203" x2="64" y2="203" stroke="#2fd4c6" stroke-width="1.8"/>
+  <circle cx="50" cy="203" r="13" fill="#0b6980" stroke="#2fd4c6" stroke-width="2"/>
+  <text x="50" y="208" text-anchor="middle" font-family="Noto Sans, DejaVu Sans, sans-serif" font-size="12" font-weight="bold" fill="#ffffff">4</text>
+  <text x="50" y="183" text-anchor="middle" font-family="Noto Sans, DejaVu Sans, sans-serif" font-size="11" fill="#e6eff2">Forward</text>
+
+  <!-- 5: Backward -->
+  <line x1="92" y1="253" x2="64" y2="263" stroke="#2fd4c6" stroke-width="1.8"/>
+  <circle cx="50" cy="265" r="13" fill="#0b6980" stroke="#2fd4c6" stroke-width="2"/>
+  <text x="50" y="270" text-anchor="middle" font-family="Noto Sans, DejaVu Sans, sans-serif" font-size="12" font-weight="bold" fill="#ffffff">5</text>
+  <text x="50" y="294" text-anchor="middle" font-family="Noto Sans, DejaVu Sans, sans-serif" font-size="11" fill="#e6eff2">Backward</text>
+
+  <!-- 6 & 7: Scroll Up / Scroll Down -->
+  <line x1="188" y1="86" x2="288" y2="48" stroke="#5cd4ef" stroke-width="1.8"/>
+  <circle cx="302" cy="48" r="13" fill="#164e34" stroke="#7ee39d" stroke-width="2"/>
+  <text x="302" y="53" text-anchor="middle" font-family="Noto Sans, DejaVu Sans, sans-serif" font-size="12" font-weight="bold" fill="#ffffff">6</text>
+  <text x="302" y="28" text-anchor="middle" font-family="Noto Sans, DejaVu Sans, sans-serif" font-size="11" fill="#9df5c8">Scroll Up</text>
+
+  <line x1="188" y1="160" x2="288" y2="210" stroke="#2fd4c6" stroke-width="1.8"/>
+  <circle cx="302" cy="212" r="13" fill="#164e34" stroke="#7ee39d" stroke-width="2"/>
+  <text x="302" y="217" text-anchor="middle" font-family="Noto Sans, DejaVu Sans, sans-serif" font-size="12" font-weight="bold" fill="#ffffff">7</text>
+  <text x="302" y="241" text-anchor="middle" font-family="Noto Sans, DejaVu Sans, sans-serif" font-size="11" fill="#9df5c8">Scroll Down</text>
+
+  <!-- Footer legend -->
+  <text x="180" y="450" text-anchor="middle" font-family="Noto Sans, DejaVu Sans, sans-serif" font-size="11" fill="#9cb2ba">7 Programmable Hardware Controls · Profiles 1–3</text>
+</svg>

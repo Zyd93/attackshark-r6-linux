@@ -1,0 +1,50 @@
+name: CI & Release Builds
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  linux-test-and-package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run syntax, shell, and unit checks
+        run: |
+          python3 -m py_compile attackshark_r6/*.py tests/*.py
+          python3 -m unittest discover -s tests -v
+          bash -n install.sh uninstall.sh
+
+      - name: Package Linux release archive
+        run: |
+          tar --exclude='__pycache__' --exclude='*.pyc' -czf attackshark-r6-linux.tar.gz \
+            attackshark_r6 assets tests attackshark-r6 attackshark-r6-cli \
+            60-attackshark-r6.rules install.sh uninstall.sh README.md LICENSE SECURITY.md
+
+      - name: Upload Linux archive artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: attackshark-r6-linux
+          path: attackshark-r6-linux.tar.gz
+
+      - name: Attach Linux archive to GitHub Release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" attackshark-r6-linux.tar.gz --clobber
