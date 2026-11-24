@@ -1214,8 +1214,10 @@ class MainWindow(QMainWindow):
         # Left column: mouse diagram
         left_card = QFrame()
         left_card.setObjectName("Card")
-        left_card.setMinimumWidth(280)
+        left_card.setMinimumWidth(310)
         lc_lay = QVBoxLayout(left_card)
+        lc_lay.setContentsMargins(16, 16, 16, 16)
+        lc_lay.setSpacing(12)
         lc_lay.setAlignment(Qt.AlignCenter)
         img_lbl = QLabel()
         pm = _asset_pixmap("mouse_diagram.png")
@@ -1223,7 +1225,10 @@ class MainWindow(QMainWindow):
             img_lbl.setPixmap(pm.scaledToHeight(360, Qt.SmoothTransformation))
         img_lbl.setAlignment(Qt.AlignCenter)
         lc_lay.addWidget(img_lbl)
-        hint = QLabel("Click any button on the right to remap it\nto mouse, keyboard, macro, media, or DPI actions.")
+        hint = QLabel(
+            "Click any button on the right to remap it to mouse, keyboard, macro, media, or DPI actions."
+        )
+        hint.setWordWrap(True)
         hint.setAlignment(Qt.AlignCenter)
         hint.setStyleSheet("color: #9cb2ba;")
         lc_lay.addWidget(hint)
@@ -1481,7 +1486,9 @@ class MainWindow(QMainWindow):
         self.dev_pic_lbl = QLabel()
         pm = _asset_pixmap("device_wireless.png")
         if not pm.isNull():
-            self.dev_pic_lbl.setPixmap(pm.scaledToHeight(210, Qt.SmoothTransformation))
+            self.dev_pic_lbl.setPixmap(
+                pm.scaled(280, 210, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            )
         db_lay.addWidget(self.dev_pic_lbl)
 
         self.dev_info_lbl = QLabel("No device connected.")

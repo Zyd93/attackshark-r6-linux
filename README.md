@@ -220,7 +220,7 @@ attackshark-r6-linux/
 │   ├── settings.py        # XDG atomic JSON settings persistence (~/.config/attackshark-r6/settings.json)
 │   ├── cli.py             # Argparse CLI frontend
 │   └── gui.py             # PyQt5 Control Center + zero-resource system tray idle mode
-├── assets/                # 100% original GPL-3.0 SVG + rendered PNG icons & hardware diagrams
+├── assets/                # Original GPL-3.0 matte-white studio PNG renders & pairing icon
 ├── tests/
 │   ├── test_protocol.py   # Protocol frame, macro codec, hidraw normalization, RLock & settings tests
 │   └── test_gui_tray.py   # Offscreen PyQt5 Settings & tray suspend/resume tests
