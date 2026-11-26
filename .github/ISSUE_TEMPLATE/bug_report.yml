@@ -1,0 +1,51 @@
+name: Bug report
+description: Something doesn't work as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for reporting! Please fill in as much as you can.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1.
+        2.
+        3.
+  - type: input
+    id: version
+    attributes:
+      label: ATTACK SHARK R6 Linux version
+      description: Shown in Releases, or `attackshark_r6/__init__.py` (e.g. 1.0.2)
+    validations:
+      required: true
+  - type: input
+    id: distro
+    attributes:
+      label: Linux distribution and desktop
+      placeholder: e.g. Arch / KDE Plasma 6, Ubuntu 24.04 / GNOME
+    validations:
+      required: true
+  - type: dropdown
+    id: connection
+    attributes:
+      label: Connection
+      options:
+        - Wired (373e:0021)
+        - 8K wireless dongle (373e:0022)
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / error output
+      description: Output of `attackshark-r6-cli --debug status` (and `attackshark-r6-cli devices`).
+      render: shell

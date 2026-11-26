@@ -248,6 +248,10 @@ Key Linux protocol notes implemented from reverse-engineering the stock `DriverC
   Ensure your desktop session provides a StatusNotifier / System Tray widget (standard in KDE Plasma, GNOME + AppIndicator extension, XFCE, etc.). In the **Settings** tab, **System tray status** tells you whether Qt detected an active tray.
 - **Dongle connected (`373e:0022`) while wireless mouse is asleep**:
   Wake the mouse by moving or clicking it, then click **Refresh** in the top bar (or wake events over `MI01` will automatically trigger a sync).
+- **A setting shows an error instead of applying**:
+  The mouse didn't confirm the change, usually because the wireless mouse is asleep. Move or click it and try again. Since v1.0.2 the app reports this instead of silently claiming success.
+- **Upgrading from v1.0.1 or earlier**:
+  Reinstall the udev rule (`./install.sh` or the **Install USB Permissions** button). The new rule only grants access to the mouse's hidraw nodes and drops the broader raw-USB permission.
 - **Inspecting raw USB frames**:
   ```bash
   attackshark-r6-cli --debug status
