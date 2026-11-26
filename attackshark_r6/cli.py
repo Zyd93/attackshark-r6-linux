@@ -42,6 +42,7 @@ from .protocol import (
     TARGET_MOUSE,
     ButtonBinding,
     DPIStage,
+    ProtocolError,
     R6Protocol,
     build_packet,
 )
@@ -81,7 +82,7 @@ def _open_proto(
     info = _select_device(device_path)
     transport = HidrawTransport(info.control_path, debug=debug)
     transport.open()
-    return info, transport, R6Protocol(transport)
+    return info, transport, R6Protocol(transport, is_wireless=info.is_wireless)
 
 
 def _parse_bool(val: str) -> bool:
@@ -266,7 +267,8 @@ def cmd_status(args: argparse.Namespace) -> int:
         print(f"Mouse FW      : {state.device_fw}   Dongle FW: {state.dongle_fw}   PID: 0x{state.device_pid:04X}")
         print(f"Battery       : {state.battery_percent}%{chg}")
         print(f"Profile       : {state.profile_id}")
-        print(f"Polling Rate  : {state.polling_rate_hz} Hz")
+        poll_str = f"{state.polling_rate_hz} Hz" if state.polling_rate_hz is not None else "unknown"
+        print(f"Polling Rate  : {poll_str}")
         print(f"LOD           : {lod_str}")
         print(f"Debounce      : {state.debounce_ms} ms")
         print(f"Sleep Timeout : {sleep_str}")
@@ -431,6 +433,14 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    try:
+        return _dispatch(args)
+    except (ProtocolError, ValueError, OSError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+
+def _dispatch(args: argparse.Namespace) -> int:
     if hasattr(args, "func"):
         return int(args.func(args))
 

@@ -114,7 +114,7 @@ from .hid_transport import (
     discover_devices,
 )
 from .macros import MacroStep, decode_macro, encode_macro
-from .protocol import ButtonBinding, DPIStage, MouseState, R6Protocol
+from .protocol import ButtonBinding, DPIStage, MouseState, ProtocolError, R6Protocol
 from .settings import AppSettings, default_settings_path, load_settings, save_settings
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -1698,10 +1698,17 @@ class MainWindow(QMainWindow):
 
     def _connect_device(self, info: R6DeviceInfo) -> None:
         self._disconnect_device()
+        transport = HidrawTransport(info.control_path)
+        try:
+            transport.open()
+        except OSError as exc:
+            self.statusBar().showMessage(
+                f"Could not open {info.control_path}: {exc}", 8000
+            )
+            return
         self.dev_info = info
-        self.transport = HidrawTransport(info.control_path)
-        self.transport.open()
-        self.proto = R6Protocol(self.transport)
+        self.transport = transport
+        self.proto = R6Protocol(self.transport, is_wireless=info.is_wireless)
 
         mode_txt = "Wireless 8K" if info.is_wireless else "Wired"
         self._set_status_pill(mode_txt, "#164e34", "#9df5c8")
@@ -1765,14 +1772,19 @@ class MainWindow(QMainWindow):
                 "  sudo udevadm control --reload-rules && sudo udevadm trigger",
             )
             return
-        cmd = (
+        # Paths are passed as positional args ($1/$2), never interpolated into the script.
+        script = (
             "rm -f /etc/udev/rules.d/99-attackshark-r6.rules && "
-            f"install -m 0644 '{UDEV_RULE_SOURCE}' '{UDEV_RULE_TARGET}' && "
+            'install -m 0644 "$1" "$2" && '
             "udevadm control --reload-rules && "
             "udevadm trigger --subsystem-match=hidraw --subsystem-match=usb && "
             "udevadm settle"
         )
-        res = subprocess.run([pkexec, "sh", "-c", cmd], capture_output=True, text=True)
+        res = subprocess.run(
+            [pkexec, "sh", "-c", script, "sh", str(UDEV_RULE_SOURCE), str(UDEV_RULE_TARGET)],
+            capture_output=True,
+            text=True,
+        )
         if res.returncode != 0:
             QMessageBox.warning(
                 self,
@@ -1897,7 +1909,11 @@ class MainWindow(QMainWindow):
                 row.set_values(enabled, active, stage, color)
 
             # Polling rate
-            poll_idx = self.polling_combo.findData(state_obj.polling_rate_hz)
+            poll_idx = (
+                -1
+                if state_obj.polling_rate_hz is None
+                else self.polling_combo.findData(state_obj.polling_rate_hz)
+            )
             if poll_idx >= 0:
                 self.polling_combo.setCurrentIndex(poll_idx)
 
@@ -1932,8 +1948,13 @@ class MainWindow(QMainWindow):
         finally:
             self._syncing_ui = False
 
+        poll_txt = (
+            "unknown polling rate"
+            if state_obj.polling_rate_hz is None
+            else f"{state_obj.polling_rate_hz} Hz"
+        )
         self.statusBar().showMessage(
-            f"Synced Profile {state_obj.profile_id} ({len(state_obj.dpi_stages)} DPI stages, {state_obj.polling_rate_hz} Hz)",
+            f"Synced Profile {state_obj.profile_id} ({len(state_obj.dpi_stages)} DPI stages, {poll_txt})",
             3500,
         )
 
@@ -2390,7 +2411,13 @@ class MainWindow(QMainWindow):
             return
         self.pair_btn.setEnabled(False)
         self.pair_status_lbl.setText("Pairing... Hold L+M+R for 3s")
-        self.proto.set_pair_status(True)
+        try:
+            self.proto.set_pair_status(True)
+        except (OSError, ProtocolError) as exc:
+            self.pair_status_lbl.setText("Pairing failed")
+            self.pair_btn.setEnabled(True)
+            self.statusBar().showMessage(f"Pairing failed: {exc}", 6000)
+            return
         self._pair_deadline = time.monotonic() + 20.0
 
         if self._pair_timer is not None:
@@ -2403,21 +2430,28 @@ class MainWindow(QMainWindow):
     def _poll_pairing(self) -> None:
         if self.proto is None:
             return
-        if time.monotonic() >= self._pair_deadline:
-            assert self._pair_timer is not None
-            self._pair_timer.stop()
-            self.proto.set_pair_status(False)
-            self.pair_status_lbl.setText("Timed out")
+        try:
+            if time.monotonic() >= self._pair_deadline:
+                if self._pair_timer is not None:
+                    self._pair_timer.stop()
+                self.proto.set_pair_status(False)
+                self.pair_status_lbl.setText("Timed out")
+                self.pair_btn.setEnabled(True)
+                return
+            st = self.proto.get_pair_status()
+            if st == 2:
+                if self._pair_timer is not None:
+                    self._pair_timer.stop()
+                self.proto.set_pair_status(False)
+                self.pair_status_lbl.setText("Paired successfully!")
+                self.pair_btn.setEnabled(True)
+                self._refresh_full_state()
+        except (OSError, ProtocolError) as exc:
+            if self._pair_timer is not None:
+                self._pair_timer.stop()
+            self.pair_status_lbl.setText("Pairing failed")
             self.pair_btn.setEnabled(True)
-            return
-        st = self.proto.get_pair_status()
-        if st == 2:
-            assert self._pair_timer is not None
-            self._pair_timer.stop()
-            self.proto.set_pair_status(False)
-            self.pair_status_lbl.setText("Paired successfully!")
-            self.pair_btn.setEnabled(True)
-            self._refresh_full_state()
+            self.statusBar().showMessage(f"Pairing failed: {exc}", 6000)
 
     def _export_profile(self) -> None:
         if self.state is None:
@@ -2430,8 +2464,12 @@ class MainWindow(QMainWindow):
         )
         if not path:
             return
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(self.state.to_export_dict(), f, indent=2)
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(self.state.to_export_dict(), f, indent=2)
+        except (OSError, TypeError, ValueError) as exc:
+            QMessageBox.warning(self, "Export Failed", f"Could not write {path}:\n{exc}")
+            return
         self.statusBar().showMessage(f"Exported profile to {path}", 3500)
 
     def _import_profile(self) -> None:
@@ -2442,16 +2480,25 @@ class MainWindow(QMainWindow):
         )
         if not path:
             return
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        pid = self._current_profile_id()
         proto = self.proto
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            proto.validate_export_dict(data)
+        except (OSError, ValueError, ProtocolError) as exc:
+            QMessageBox.warning(self, "Import Failed", f"Could not import {path}:\n{exc}")
+            return
+        pid = self._current_profile_id()
 
         def work(_p: Callable[[int], None]) -> MouseState:
             proto.apply_export_dict(pid, data)
             return proto.read_full_state(profile_id=pid)
 
-        self._run_worker(work, self._apply_state_to_ui)
+        self._run_worker(
+            work,
+            self._apply_state_to_ui,
+            lambda msg: QMessageBox.warning(self, "Import Failed", msg),
+        )
 
     def _reset_current_profile(self) -> None:
         if self.proto is None:

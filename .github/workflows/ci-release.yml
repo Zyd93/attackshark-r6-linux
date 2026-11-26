@@ -13,22 +13,34 @@ permissions:
   contents: write
 
 jobs:
-  linux-test-and-package:
+  test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.14"]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
+          allow-prereleases: true
 
       - name: Run syntax, shell, and unit checks
         run: |
           python3 -m py_compile attackshark_r6/*.py tests/*.py
           python3 -m unittest discover -s tests -v
           bash -n install.sh uninstall.sh
+
+  linux-package:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Package Linux release archive
         run: |

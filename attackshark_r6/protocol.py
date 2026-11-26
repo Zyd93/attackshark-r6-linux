@@ -36,6 +36,7 @@ from .constants import (
     TARGET_DONGLE,
     TARGET_DONGLE_CTRL,
     TARGET_MOUSE,
+    WIRED_POLLING_RATES,
     ButtonID,
     DPIAction,
     FunctionID,
@@ -222,7 +223,7 @@ class MouseState:
     device_pid: int
     battery_percent: int
     battery_charging: bool
-    polling_rate_hz: int
+    polling_rate_hz: Optional[int]
     active_dpi_stage: int
     dpi_stages: List[DPIStage]
     dpi_colors: List[Tuple[int, int, int]]
@@ -281,8 +282,11 @@ class R6Protocol:
         transport: HidrawTransport,
         wait_sec: float = 0.030,
         macro_retry_sec: float = 0.200,
+        is_wireless: Optional[bool] = None,
     ) -> None:
         self.transport = transport
+        # None = connection type unknown (no wired polling cap enforced here).
+        self.is_wireless = is_wireless
         self.wait_sec = wait_sec
         self.macro_retry_sec = macro_retry_sec
         self._tx_lock = threading.RLock()
@@ -336,6 +340,24 @@ class R6Protocol:
             self._sleep()
             return self.transport.get_feature()
 
+    @staticmethod
+    def _expect_ok(resp: bytearray, what: str) -> bool:
+        """Raise ProtocolError unless the firmware acknowledged a setter with STATUS_OK."""
+        if resp[1] != STATUS_OK:
+            raise ProtocolError(
+                f"{what} was not acknowledged by the mouse (status 0x{resp[1]:02X})"
+            )
+        return True
+
+    def _check_polling_allowed(self, hz: int) -> None:
+        if hz not in POLLING_HZ_TO_CODE:
+            raise ValueError(f"Unsupported polling rate: {hz} Hz")
+        if self.is_wireless is False and hz not in WIRED_POLLING_RATES:
+            raise ValueError(
+                f"Polling rate {hz} Hz is not supported in wired mode "
+                f"(max {max(WIRED_POLLING_RATES)} Hz)"
+            )
+
     # ------------------------------------------------------------------
     # Device & Dongle Info / Status
     # ------------------------------------------------------------------
@@ -377,27 +399,27 @@ class R6Protocol:
         pid = max(PROFILE_MIN, min(PROFILE_MAX, int(profile_id)))
         cmd = build_packet(TARGET_MOUSE, 0x01, 0x00, 0x05, bytes([pid]))
         r = self._transact_simple(cmd)
-        return r[1] == STATUS_OK
+        return self._expect_ok(r, "Set profile")
 
     # ------------------------------------------------------------------
     # Polling Rate (NewProtocol = 1)
     # ------------------------------------------------------------------
 
-    def get_polling_rate(self, profile_id: int) -> int:
+    def get_polling_rate(self, profile_id: int) -> Optional[int]:
+        """Return polling rate in Hz, or None if the firmware reports an unknown code."""
         cmd = build_packet(TARGET_MOUSE, 0x02, 0x01, 0x80, bytes([profile_id]))
         r = self._transact(cmd, retries=3, verify_echo=True)
         code = int(r[8])
         if code == 0x10:
             code = 0x01
-        return POLLING_CODE_TO_HZ.get(code, 1000)
+        return POLLING_CODE_TO_HZ.get(code)
 
     def set_polling_rate(self, profile_id: int, hz: int) -> bool:
-        if hz not in POLLING_HZ_TO_CODE:
-            raise ValueError(f"Unsupported polling rate: {hz} Hz")
+        self._check_polling_allowed(hz)
         code = POLLING_HZ_TO_CODE[hz]
         cmd = build_packet(TARGET_MOUSE, 0x02, 0x01, 0x00, bytes([profile_id, code]))
         r = self._transact_simple(cmd)
-        return r[1] == STATUS_OK
+        return self._expect_ok(r, "Set polling rate")
 
     # ------------------------------------------------------------------
     # DPI Stages & Colors
@@ -435,7 +457,7 @@ class R6Protocol:
         idx = max(1, min(DPI_MAX_STAGES, int(stage_index)))
         cmd = build_packet(TARGET_MOUSE, 0x02, 0x01, 0x02, bytes([profile_id, idx]))
         r = self._transact_simple(cmd)
-        return r[1] == STATUS_OK
+        return self._expect_ok(r, "Set active DPI stage")
 
     def set_dpi_stages(self, profile_id: int, stages: List[DPIStage]) -> bool:
         if not stages or len(stages) > DPI_MAX_STAGES:
@@ -459,7 +481,7 @@ class R6Protocol:
             payload,
         )
         r = self._transact(cmd, retries=5)
-        return r[1] == STATUS_OK
+        return self._expect_ok(r, "Set DPI stages")
 
     def get_dpi_colors(self, profile_id: int) -> List[Tuple[int, int, int]]:
         cmd = build_packet(TARGET_MOUSE, 0x13, 0x02, 0x81, bytes([profile_id]))
@@ -481,7 +503,7 @@ class R6Protocol:
             payload.extend((r_c & 0xFF, g_c & 0xFF, b_c & 0xFF))
         cmd = build_packet(TARGET_MOUSE, 0x13, 0x02, 0x01, payload)
         r = self._transact_simple(cmd)
-        return r[1] == STATUS_OK
+        return self._expect_ok(r, "Set DPI colors")
 
     # ------------------------------------------------------------------
     # Sleep, Debounce, LOD & Sensor Options (NewProtocol = 1)
@@ -504,7 +526,7 @@ class R6Protocol:
             bytes([profile_id, (sec >> 8) & 0xFF, sec & 0xFF]),
         )
         r = self._transact_simple(cmd)
-        return r[1] == STATUS_OK
+        return self._expect_ok(r, "Set sleep time")
 
     def get_debounce_time(self, profile_id: int) -> int:
         cmd = build_packet(TARGET_MOUSE, 0x02, 0x00, 0x88, bytes([profile_id]))
@@ -515,7 +537,7 @@ class R6Protocol:
         val = max(DEBOUNCE_MIN_MS, min(DEBOUNCE_MAX_MS, int(ms)))
         cmd = build_packet(TARGET_MOUSE, 0x02, 0x00, 0x08, bytes([profile_id, val]))
         r = self._transact_simple(cmd)
-        return r[1] == STATUS_OK
+        return self._expect_ok(r, "Set debounce time")
 
     def get_lod(self, profile_id: int) -> int:
         cmd = build_packet(TARGET_MOUSE, 0x02, 0x01, 0x88, bytes([profile_id]))
@@ -529,7 +551,7 @@ class R6Protocol:
             TARGET_MOUSE, 0x02, 0x01, 0x08, bytes([profile_id, lod_code])
         )
         r = self._transact_simple(cmd)
-        return r[1] == STATUS_OK
+        return self._expect_ok(r, "Set LOD")
 
     def get_angle_snap(self, profile_id: int) -> bool:
         cmd = build_packet(TARGET_MOUSE, 0x02, 0x01, 0x84, bytes([profile_id]))
@@ -539,7 +561,7 @@ class R6Protocol:
         cmd = build_packet(
             TARGET_MOUSE, 0x02, 0x01, 0x04, bytes([profile_id, 1 if enable else 0])
         )
-        return self._transact_simple(cmd)[1] == STATUS_OK
+        return self._expect_ok(self._transact_simple(cmd), "Set angle snap")
 
     def get_motion_sync(self, profile_id: int) -> bool:
         cmd = build_packet(TARGET_MOUSE, 0x02, 0x01, 0x89, bytes([profile_id]))
@@ -549,7 +571,7 @@ class R6Protocol:
         cmd = build_packet(
             TARGET_MOUSE, 0x02, 0x01, 0x09, bytes([profile_id, 1 if enable else 0])
         )
-        return self._transact_simple(cmd)[1] == STATUS_OK
+        return self._expect_ok(self._transact_simple(cmd), "Set motion sync")
 
     def get_ripple_control(self, profile_id: int) -> bool:
         cmd = build_packet(TARGET_MOUSE, 0x02, 0x01, 0x8A, bytes([profile_id]))
@@ -559,7 +581,7 @@ class R6Protocol:
         cmd = build_packet(
             TARGET_MOUSE, 0x02, 0x01, 0x0A, bytes([profile_id, 1 if enable else 0])
         )
-        return self._transact_simple(cmd)[1] == STATUS_OK
+        return self._expect_ok(self._transact_simple(cmd), "Set ripple control")
 
     # ------------------------------------------------------------------
     # Button Bindings
@@ -588,7 +610,7 @@ class R6Protocol:
         ) + d
         cmd = build_packet(TARGET_MOUSE, 5 + len(d), 0x03, 0x00, payload)
         r = self._transact_simple(cmd)
-        return r[1] == STATUS_OK
+        return self._expect_ok(r, "Set button binding")
 
     # ------------------------------------------------------------------
     # Onboard Macros (IDs 1..29)
@@ -629,7 +651,7 @@ class R6Protocol:
             bytes([(macro_id >> 8) & 0xFF, macro_id & 0xFF]),
         )
         r = self._transact_simple(cmd)
-        return r[1] == STATUS_OK
+        return self._expect_ok(r, "Delete macro")
 
     def allocate_macro_size(self, macro_id: int, total_size: int) -> bool:
         payload = bytes(
@@ -762,7 +784,7 @@ class R6Protocol:
             TARGET_DONGLE_CTRL, 0x01, 0x00, 0x0C, bytes([1 if start else 0])
         )
         r = self._transact_simple(cmd)
-        return r[1] == STATUS_OK
+        return self._expect_ok(r, "Set pairing status")
 
     def get_pair_status(self) -> int:
         """Return pairing status byte (2 == paired)."""
@@ -837,38 +859,158 @@ class R6Protocol:
             buttons=btn_map,
         )
 
-    def apply_export_dict(self, profile_id: int, data: Dict[str, object]) -> None:
+    def validate_export_dict(self, data: Dict[str, object]) -> Dict[str, object]:
+        """Validate a profile export dict and return normalized values.
+
+        Raises ProtocolError (without touching the mouse) on the first problem.
+        """
+        from .constants import LOD_CODE_TO_NAME
+
+        if not isinstance(data, dict):
+            raise ProtocolError("Profile data must be a JSON object")
+
+        def as_int(value: object, name: str) -> int:
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise ProtocolError(f"{name} must be an integer, got {value!r}")
+            return value
+
+        def as_bool(value: object, name: str) -> bool:
+            if not isinstance(value, bool):
+                raise ProtocolError(f"{name} must be true or false, got {value!r}")
+            return value
+
+        out: Dict[str, object] = {}
+
         if "dpi_stages" in data:
-            raw_stages = data["dpi_stages"]
-            if isinstance(raw_stages, list) and raw_stages:
-                stages = [
-                    DPIStage(x=int(s["x"]), y=int(s.get("y", s["x"])))  # type: ignore[index]
-                    for s in raw_stages[:DPI_MAX_STAGES]
-                ]
-                self.set_dpi_stages(profile_id, stages)
+            raw = data["dpi_stages"]
+            if not isinstance(raw, list) or not raw:
+                raise ProtocolError("dpi_stages must be a non-empty list")
+            if len(raw) > DPI_MAX_STAGES:
+                raise ProtocolError(f"dpi_stages has {len(raw)} entries (max {DPI_MAX_STAGES})")
+            stages: List[DPIStage] = []
+            for n, entry in enumerate(raw, 1):
+                if not isinstance(entry, dict) or "x" not in entry:
+                    raise ProtocolError(f"dpi_stages[{n}] must be an object with 'x' (and optional 'y')")
+                x = as_int(entry["x"], f"dpi_stages[{n}].x")
+                y = as_int(entry.get("y", x), f"dpi_stages[{n}].y")
+                for axis, v in (("x", x), ("y", y)):
+                    if not (DPI_MIN <= v <= DPI_MAX) or v % DPI_STEP != 0:
+                        raise ProtocolError(
+                            f"dpi_stages[{n}].{axis}={v} is invalid "
+                            f"(must be {DPI_MIN}..{DPI_MAX} in steps of {DPI_STEP})"
+                        )
+                stages.append(DPIStage(x=x, y=y))
+            out["dpi_stages"] = stages
+
         if "dpi_colors" in data:
-            raw_colors = data["dpi_colors"]
-            if isinstance(raw_colors, list) and raw_colors:
-                colors = [(int(c[0]), int(c[1]), int(c[2])) for c in raw_colors[:DPI_MAX_STAGES]]
-                self.set_dpi_colors(profile_id, colors)
+            raw = data["dpi_colors"]
+            if not isinstance(raw, list) or not raw:
+                raise ProtocolError("dpi_colors must be a non-empty list")
+            if len(raw) > DPI_MAX_STAGES:
+                raise ProtocolError(f"dpi_colors has {len(raw)} entries (max {DPI_MAX_STAGES})")
+            colors: List[Tuple[int, int, int]] = []
+            for n, c in enumerate(raw, 1):
+                if not isinstance(c, (list, tuple)) or len(c) != 3:
+                    raise ProtocolError(f"dpi_colors[{n}] must be [r, g, b]")
+                rgb = tuple(as_int(v, f"dpi_colors[{n}]") for v in c)
+                if any(not (0 <= v <= 255) for v in rgb):
+                    raise ProtocolError(f"dpi_colors[{n}] components must be 0..255")
+                colors.append((rgb[0], rgb[1], rgb[2]))
+            out["dpi_colors"] = colors
+
         if "active_dpi_stage" in data:
-            self.set_active_dpi(profile_id, int(data["active_dpi_stage"]))  # type: ignore[arg-type]
+            idx = as_int(data["active_dpi_stage"], "active_dpi_stage")
+            limit = len(out["dpi_stages"]) if "dpi_stages" in out else DPI_MAX_STAGES  # type: ignore[arg-type]
+            if not (1 <= idx <= limit):
+                raise ProtocolError(f"active_dpi_stage={idx} must be 1..{limit}")
+            out["active_dpi_stage"] = idx
+
         if "polling_rate_hz" in data:
-            self.set_polling_rate(profile_id, int(data["polling_rate_hz"]))  # type: ignore[arg-type]
+            hz = as_int(data["polling_rate_hz"], "polling_rate_hz")
+            try:
+                self._check_polling_allowed(hz)
+            except ValueError as exc:
+                raise ProtocolError(str(exc)) from None
+            out["polling_rate_hz"] = hz
+
         if "lod_code" in data:
-            self.set_lod(profile_id, int(data["lod_code"]))  # type: ignore[arg-type]
+            code = as_int(data["lod_code"], "lod_code")
+            if code not in LOD_CODE_TO_NAME:
+                raise ProtocolError(f"lod_code={code} is not a supported LOD code")
+            out["lod_code"] = code
+
         if "debounce_ms" in data:
-            self.set_debounce_time(profile_id, int(data["debounce_ms"]))  # type: ignore[arg-type]
+            ms = as_int(data["debounce_ms"], "debounce_ms")
+            if not (DEBOUNCE_MIN_MS <= ms <= DEBOUNCE_MAX_MS):
+                raise ProtocolError(f"debounce_ms={ms} must be {DEBOUNCE_MIN_MS}..{DEBOUNCE_MAX_MS}")
+            out["debounce_ms"] = ms
+
         if "sleep_sec" in data:
-            self.set_sleep_time(profile_id, int(data["sleep_sec"]))  # type: ignore[arg-type]
-        if "angle_snap" in data:
-            self.set_angle_snap(profile_id, bool(data["angle_snap"]))
-        if "motion_sync" in data:
-            self.set_motion_sync(profile_id, bool(data["motion_sync"]))
-        if "ripple_control" in data:
-            self.set_ripple_control(profile_id, bool(data["ripple_control"]))
-        if "buttons" in data and isinstance(data["buttons"], dict):
-            for k, v in data["buttons"].items():
-                bid = ButtonID(int(k))
-                binding = ButtonBinding.from_dict(v)
-                self.set_button(profile_id, bid, binding)
+            sec = as_int(data["sleep_sec"], "sleep_sec")
+            if sec != SLEEP_DISABLED and not (SLEEP_MIN_SEC <= sec <= SLEEP_MAX_SEC):
+                raise ProtocolError(
+                    f"sleep_sec={sec} must be {SLEEP_MIN_SEC}..{SLEEP_MAX_SEC} or {SLEEP_DISABLED} (never)"
+                )
+            out["sleep_sec"] = sec
+
+        for key in ("angle_snap", "motion_sync", "ripple_control"):
+            if key in data:
+                out[key] = as_bool(data[key], key)
+
+        if "buttons" in data:
+            raw_buttons = data["buttons"]
+            if not isinstance(raw_buttons, dict):
+                raise ProtocolError("buttons must be an object")
+            buttons: List[Tuple[ButtonID, ButtonBinding]] = []
+            for k, v in raw_buttons.items():
+                try:
+                    bid = ButtonID(int(k))
+                except (ValueError, TypeError):
+                    raise ProtocolError(f"buttons: unknown button id {k!r}") from None
+                if not isinstance(v, dict):
+                    raise ProtocolError(f"buttons[{k}] must be an object")
+                try:
+                    fid = FunctionID(as_int(v.get("function_id"), f"buttons[{k}].function_id"))
+                except ValueError:
+                    raise ProtocolError(
+                        f"buttons[{k}].function_id={v.get('function_id')!r} is not a valid function"
+                    ) from None
+                try:
+                    raw_hex = v.get("data_hex", "")
+                    if not isinstance(raw_hex, str):
+                        raise ValueError
+                    payload = bytes.fromhex(raw_hex)
+                except ValueError:
+                    raise ProtocolError(f"buttons[{k}].data_hex must be a hex string") from None
+                if len(payload) > 52:
+                    raise ProtocolError(f"buttons[{k}].data_hex is too long ({len(payload)} bytes, max 52)")
+                buttons.append((bid, ButtonBinding(function_id=fid, data=payload)))
+            out["buttons"] = buttons
+
+        return out
+
+    def apply_export_dict(self, profile_id: int, data: Dict[str, object]) -> None:
+        """Apply an exported profile. The whole dict is validated before any write."""
+        plan = self.validate_export_dict(data)
+        if "dpi_stages" in plan:
+            self.set_dpi_stages(profile_id, plan["dpi_stages"])  # type: ignore[arg-type]
+        if "dpi_colors" in plan:
+            self.set_dpi_colors(profile_id, plan["dpi_colors"])  # type: ignore[arg-type]
+        if "active_dpi_stage" in plan:
+            self.set_active_dpi(profile_id, plan["active_dpi_stage"])  # type: ignore[arg-type]
+        if "polling_rate_hz" in plan:
+            self.set_polling_rate(profile_id, plan["polling_rate_hz"])  # type: ignore[arg-type]
+        if "lod_code" in plan:
+            self.set_lod(profile_id, plan["lod_code"])  # type: ignore[arg-type]
+        if "debounce_ms" in plan:
+            self.set_debounce_time(profile_id, plan["debounce_ms"])  # type: ignore[arg-type]
+        if "sleep_sec" in plan:
+            self.set_sleep_time(profile_id, plan["sleep_sec"])  # type: ignore[arg-type]
+        if "angle_snap" in plan:
+            self.set_angle_snap(profile_id, plan["angle_snap"])  # type: ignore[arg-type]
+        if "motion_sync" in plan:
+            self.set_motion_sync(profile_id, plan["motion_sync"])  # type: ignore[arg-type]
+        if "ripple_control" in plan:
+            self.set_ripple_control(profile_id, plan["ripple_control"])  # type: ignore[arg-type]
+        for bid, binding in plan.get("buttons", []):  # type: ignore[union-attr]
+            self.set_button(profile_id, bid, binding)

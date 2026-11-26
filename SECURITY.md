@@ -6,7 +6,7 @@
 
 Key security boundaries:
 - **User-space `/dev/hidraw*` access only:** The desktop GUI and CLI never run as `root` and never load kernel modules. Hardware communication uses standard Linux `HIDIOCSFEATURE` / `HIDIOCGFEATURE` ioctls and non-blocking `read()` calls on the vendor-defined `hidraw` interfaces.
-- **Scoped `uaccess` udev rule (`60-attackshark-r6.rules`):** Only matches USB VID/PID `373e:0021` and `373e:0022` and grants local desktop session access via systemd `TAG+="uaccess"` (`MODE="0660"`), processed before systemd's `73-seat-late.rules` without making device nodes world-writable.
+- **Scoped `uaccess` udev rule (`60-attackshark-r6.rules`):** Only matches USB VID/PID `373e:0021` and `373e:0022` on `hidraw*` nodes (no raw `usb` device access is granted) and grants local desktop session access via systemd `TAG+="uaccess"` (`MODE="0660"`), processed before systemd's `73-seat-late.rules` without making device nodes world-writable.
 - **Least-privilege permission setup:** Only the one-time installation of `/etc/udev/rules.d/60-attackshark-r6.rules` uses `sudo` or `pkexec`.
 - **Zero network activity or telemetry:** The application makes zero outbound network connections and sends no analytics.
 - **Local single-instance IPC:** Single-instance window activation uses a Qt `QLocalServer` / `QLocalSocket` named socket scoped to the current user's numeric UID (`attackshark-r6-linux-<uid>`).

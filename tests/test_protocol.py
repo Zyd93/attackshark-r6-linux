@@ -30,7 +30,7 @@ from attackshark_r6.constants import (
 )
 from attackshark_r6.hid_transport import normalize_feature_response
 from attackshark_r6.macros import MacroStep, decode_macro, encode_macro
-from attackshark_r6.protocol import ButtonBinding, DPIStage, R6Protocol
+from attackshark_r6.protocol import ButtonBinding, DPIStage, ProtocolError, R6Protocol
 from attackshark_r6.settings import (
     AppSettings,
     default_settings_path,
@@ -473,6 +473,105 @@ class TestSettingsStorage(unittest.TestCase):
                     default_settings_path(),
                     Path(tmp) / "attackshark-r6" / "settings.json",
                 )
+
+
+class TestSetterFailuresAndValidation(unittest.TestCase):
+    def _proto(self, status: int = STATUS_OK, polling_code: int = 0x01, is_wireless=None):
+        def handler(cmd: bytearray, _n: int) -> bytearray:
+            r = bytearray(cmd)
+            r[0] = 0x00
+            r[1] = status
+            if cmd[5] == 1 and cmd[6] == 0x80:
+                r[8] = polling_code
+            return r
+
+        tr = FakeTransport(handler)
+        return tr, R6Protocol(tr, wait_sec=0.0, macro_retry_sec=0.0, is_wireless=is_wireless)
+
+    def test_failed_setters_raise_protocol_error(self) -> None:
+        _tr, proto = self._proto(status=0x50)
+        calls = [
+            lambda: proto.set_profile_id(1),
+            lambda: proto.set_polling_rate(1, 1000),
+            lambda: proto.set_active_dpi(1, 1),
+            lambda: proto.set_dpi_colors(1, DEFAULT_DPI_COLORS),
+            lambda: proto.set_sleep_time(1, 300),
+            lambda: proto.set_debounce_time(1, 4),
+            lambda: proto.set_lod(1, 0x87),
+            lambda: proto.set_angle_snap(1, True),
+            lambda: proto.set_motion_sync(1, True),
+            lambda: proto.set_ripple_control(1, True),
+            lambda: proto.set_button(1, ButtonID.FORWARD, ButtonBinding.off()),
+            lambda: proto.set_pair_status(True),
+            lambda: proto.delete_macro(3),
+        ]
+        for call in calls:
+            with self.assertRaises(ProtocolError):
+                call()
+
+    def test_unknown_polling_code_returns_none_and_0x10_alias_kept(self) -> None:
+        _tr, proto = self._proto(polling_code=0x33)
+        self.assertIsNone(proto.get_polling_rate(1))
+        _tr, proto = self._proto(polling_code=0x10)
+        self.assertEqual(proto.get_polling_rate(1), 1000)
+
+    def test_wired_polling_cap_enforced(self) -> None:
+        tr, proto = self._proto(is_wireless=False)
+        with self.assertRaises(ValueError):
+            proto.set_polling_rate(1, 8000)
+        self.assertEqual(tr.sent, [])
+        self.assertTrue(proto.set_polling_rate(1, 1000))
+        _tr, wireless = self._proto(is_wireless=True)
+        self.assertTrue(wireless.set_polling_rate(1, 8000))
+
+    def test_apply_export_dict_validates_before_any_write(self) -> None:
+        good = {"dpi_stages": [{"x": 800, "y": 800}], "polling_rate_hz": 1000}
+        bad_cases = [
+            {**good, "debounce_ms": 99},
+            {**good, "dpi_stages": [{"x": 800}, {"x": 825}]},
+            {**good, "dpi_stages": [{"x": 20}]},
+            {**good, "dpi_stages": [{"x": 50000}]},
+            {**good, "dpi_stages": "nope"},
+            {**good, "dpi_colors": [[1, 2]]},
+            {**good, "dpi_colors": [[1, 2, 300]]},
+            {**good, "polling_rate_hz": 333},
+            {**good, "polling_rate_hz": "1000"},
+            {**good, "lod_code": 0x55},
+            {**good, "active_dpi_stage": 5},
+            {**good, "angle_snap": "yes"},
+            {**good, "sleep_sec": 5},
+            {**good, "buttons": {"999": {"function_id": 0}}},
+            {**good, "buttons": {"1": {"function_id": 0x7F}}},
+            {**good, "buttons": {"1": {"function_id": 0, "data_hex": "zz"}}},
+            {**good, "buttons": [1]},
+        ]
+        for data in bad_cases:
+            tr, proto = self._proto(is_wireless=True)
+            with self.assertRaises(ProtocolError, msg=repr(data)):
+                proto.apply_export_dict(1, data)
+            self.assertEqual(tr.sent, [], msg=f"wrote to mouse for {data!r}")
+
+        tr, proto = self._proto(is_wireless=False)
+        with self.assertRaises(ProtocolError):
+            proto.apply_export_dict(1, {"polling_rate_hz": 4000})
+        self.assertEqual(tr.sent, [])
+        with self.assertRaises(ProtocolError):
+            proto.apply_export_dict(1, [1, 2])  # type: ignore[arg-type]
+
+    def test_apply_export_dict_valid_writes(self) -> None:
+        tr, proto = self._proto(is_wireless=True)
+        proto.apply_export_dict(
+            1,
+            {
+                "dpi_stages": [{"x": 800, "y": 800}, {"x": 1600}],
+                "active_dpi_stage": 2,
+                "polling_rate_hz": 2000,
+                "lod_code": 0x87,
+                "debounce_ms": 4,
+                "buttons": {"1": {"function_id": 1, "data_hex": "01"}},
+            },
+        )
+        self.assertGreaterEqual(len(tr.sent), 6)
 
 
 if __name__ == "__main__":
